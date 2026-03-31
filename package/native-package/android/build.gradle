@@ -22,7 +22,6 @@ def isNewArchitectureEnabled() {
 apply plugin: "com.android.library"
 apply plugin: "kotlin-android"
 
-
 def appProject = rootProject.allprojects.find { it.plugins.hasPlugin('com.android.application') }
 
 if (isNewArchitectureEnabled()) {
@@ -36,6 +35,7 @@ def getExtOrDefault(name) {
 def getExtOrIntegerDefault(name) {
   return rootProject.ext.has(name) ? rootProject.ext.get(name) : (project.properties["ImageResizer_" + name]).toInteger()
 }
+
 def localSharedNativeRootDir = new File(projectDir, "src/main/java/com/streamchatreactnative/shared")
 def sharedNativeRootDir = new File(projectDir, "../../shared-native/android")
 def hasNativeSources = { File dir ->
@@ -100,6 +100,12 @@ tasks.register("syncSharedShimmerSources") {
   outputs.dir(localSharedNativeRootDir)
   outputs.upToDateWhen { false }
   doLast {
+    // In old architecture builds, the shared shimmer sources should not be copied/compiled,
+    // because they rely on RN codegen-generated delegate/interface classes.
+    if (!isNewArchitectureEnabled()) {
+      return
+    }
+
     def sourceRootDir = null
     if (hasNativeSources(localSharedNativeRootDir)) {
       sourceRootDir = localSharedNativeRootDir
@@ -126,19 +132,21 @@ tasks.register("syncSharedShimmerSources") {
   }
 }
 
-tasks.matching { it.name == "preBuild" }.configureEach {
-  dependsOn("syncSharedShimmerSources")
-}
+// Only sync shimmer shared sources when New Architecture is enabled.
+if (isNewArchitectureEnabled()) {
+  tasks.matching { it.name == "preBuild" }.configureEach {
+    dependsOn("syncSharedShimmerSources")
+  }
 
-tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-  dependsOn("syncSharedShimmerSources")
+  tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+    dependsOn("syncSharedShimmerSources")
+  }
 }
 
 repositories {
   mavenCentral()
   google()
 }
-
 
 dependencies {
   // For < 0.71, this will be from the local maven repo
